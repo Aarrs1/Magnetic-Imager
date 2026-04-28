@@ -555,42 +555,43 @@ def draw_button(screen, rect, text, font, hover=False, press_flash=0.0):
 
 
 def draw_toast(screen, font, message, elapsed_ms):
-    if elapsed_ms < 0:
+    """Draw toast notification with slide-down + fade animation."""
+    if elapsed_ms < 0 or not message:
         return
 
     if elapsed_ms < TOAST_FADE_MS:
+        # Slide in + fade in
         t = elapsed_ms / TOAST_FADE_MS
-        alpha = t * t
-    elif elapsed_ms > TOAST_DURATION_MS - TOAST_FADE_MS:
-        t = (elapsed_ms - (TOAST_DURATION_MS - TOAST_FADE_MS)) / TOAST_FADE_MS
-        alpha = pow(2, -6 * t)
+        alpha = t * t  # ease-in quad
+        slide_offset = -30 * (1 - t)  # slide from -30px
+    elif elapsed_ms > TOAST_DURATION_MS:
+        # Fade out
+        t = (elapsed_ms - TOAST_DURATION_MS) / TOAST_FADE_MS
+        alpha = pow(2, -6 * t)  # exponential fade
+        slide_offset = 0
     else:
         alpha = 1.0
+        slide_offset = 0
 
     alpha = max(0.0, min(1.0, alpha))
-    if alpha <= 0.0:
+    if alpha <= 0.01:
         return
 
     text_surf = font.render(message, True, COLOR_TEXT)
     text_surf.set_alpha(int(255 * alpha))
     toast_rect = text_surf.get_rect()
-    toast_rect.inflate_ip(32, 14)
-    toast_rect.midtop = (GRID_CENTER_X, TOAST_TOP)
+    toast_rect.inflate_ip(28, 12)
+    toast_rect.midtop = (WINDOW_WIDTH // 2, 8 + int(slide_offset))
 
     toast = pygame.Surface((toast_rect.width, toast_rect.height), pygame.SRCALPHA)
-    back_alpha = int(TOAST_BACK_ALPHA * alpha)
-    fill_alpha = int(TOAST_SOLID_ALPHA * alpha)
-    border_alpha = int(TOAST_BORDER_ALPHA * alpha)
-    highlight_alpha = int(150 * alpha)
-    pygame.draw.rect(toast, (26, 32, 44, back_alpha), toast.get_rect(), border_radius=12)
-    pygame.draw.rect(toast, (210, 225, 245, fill_alpha), toast.get_rect(), border_radius=12)
-    pygame.draw.rect(toast, (230, 240, 255, border_alpha), toast.get_rect(), 1, border_radius=12)
-    pygame.draw.line(
-        toast,
-        (230, 242, 255, highlight_alpha),
-        (12, 6),
-        (toast_rect.width - 12, 6)
-    )
+    back_alpha = int(160 * alpha)
+    fill_alpha = int(210 * alpha)
+    border_alpha = int(200 * alpha)
+    pygame.draw.rect(toast, (20, 30, 48, back_alpha), toast.get_rect(), border_radius=10)
+    pygame.draw.rect(toast, (200, 218, 240, fill_alpha), toast.get_rect(), border_radius=10)
+    pygame.draw.rect(toast, (*COLOR_ACCENT_LIGHT, border_alpha), toast.get_rect(), 1, border_radius=10)
+    pygame.draw.line(toast, (220, 235, 250, int(140 * alpha)),
+                     (10, 5), (toast_rect.width - 10, 5))
     screen.blit(toast, toast_rect.topleft)
 
     text_rect = text_surf.get_rect(center=toast_rect.center)
@@ -752,7 +753,7 @@ def main():
 
         if toast_message:
             elapsed_ms = pygame.time.get_ticks() - toast_start_ms
-            if elapsed_ms >= TOAST_DURATION_MS:
+            if elapsed_ms >= TOAST_DURATION_MS + TOAST_FADE_MS:
                 toast_message = ""
             else:
                 draw_toast(screen, font, toast_message, elapsed_ms)
