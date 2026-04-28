@@ -598,6 +598,37 @@ def draw_toast(screen, font, message, elapsed_ms):
     screen.blit(text_surf, text_rect)
 
 
+def draw_status_bar(screen, font_tiny, com_info, is_live, fps, time_sec):
+    """Draw bottom status bar with COM port, live indicator, and FPS."""
+    bar_rect = pygame.Rect(0, STATUS_BAR_TOP, WINDOW_WIDTH - SIDEBAR_WIDTH, STATUS_BAR_HEIGHT)
+    bar_surf = pygame.Surface((bar_rect.width, bar_rect.height), pygame.SRCALPHA)
+    bar_surf.fill((8, 16, 26, FROST_STATUSBAR_ALPHA))
+    pygame.draw.line(bar_surf, (*COLOR_PANEL_BORDER, 30), (0, 0), (bar_rect.width, 0))
+    screen.blit(bar_surf, bar_rect.topleft)
+
+    # Left: COM port
+    com_text = font_tiny.render(com_info, True, COLOR_TEXT_MUTED)
+    com_rect = com_text.get_rect(midleft=(14, STATUS_BAR_TOP + STATUS_BAR_HEIGHT // 2))
+    screen.blit(com_text, com_rect)
+
+    # Center: live/idle indicator
+    dot_color = (100, 200, 100) if is_live else (100, 100, 110)
+    if is_live:
+        pulse = 0.6 + 0.4 * math.sin(time_sec * 3.14)
+        dot_color = (int(100 * pulse), int(200 * pulse), int(100 * pulse))
+    dot_x = bar_rect.width // 2 - 24
+    dot_y = STATUS_BAR_TOP + STATUS_BAR_HEIGHT // 2
+    pygame.draw.circle(screen, dot_color, (dot_x, dot_y), 4)
+    status_text = font_tiny.render("Live" if is_live else "Idle", True, COLOR_TEXT_MUTED)
+    status_rect = status_text.get_rect(midleft=(dot_x + 10, dot_y))
+    screen.blit(status_text, status_rect)
+
+    # Right: FPS
+    fps_text = font_tiny.render(f"FPS: {fps:.0f}", True, COLOR_TEXT_MUTED)
+    fps_rect = fps_text.get_rect(midright=(bar_rect.width - 14, STATUS_BAR_TOP + STATUS_BAR_HEIGHT // 2))
+    screen.blit(fps_text, fps_rect)
+
+
 # ── Main / 主程序 ─────────────────────────────────────────────────
 def main():
     pygame.init()
