@@ -434,6 +434,68 @@ def draw_grid_label(screen, font, text, grid_center_x, grid_top):
     screen.blit(label, label_rect)
 
 
+def draw_color_bar(screen, font_tiny, center_x, top):
+    """Draw horizontal gradient color bar with tick values and unit label."""
+    bar_width = 400
+    bar_height = 18
+    bar_left = center_x - bar_width // 2
+
+    # Frosted card background
+    card_padding = 14
+    card_rect = pygame.Rect(
+        bar_left - card_padding, top - card_padding,
+        bar_width + card_padding * 2, bar_height + 44,
+    )
+    card_surf = pygame.Surface((card_rect.width, card_rect.height), pygame.SRCALPHA)
+    card_surf.fill((COLOR_PANEL[0], COLOR_PANEL[1], COLOR_PANEL[2], 120))
+    pygame.draw.rect(card_surf, (*COLOR_PANEL_BORDER, 40), card_surf.get_rect(), 1, border_radius=8)
+    screen.blit(card_surf, card_rect.topleft)
+
+    # Tick labels
+    tick_values = [-660, -495, -330, -165, 0, 165, 330, 495, 660]
+    tick_positions = [bar_left + int(bar_width * (i / 8)) for i in range(9)]
+    for val, tx in zip(tick_values, tick_positions):
+        lbl = font_tiny.render(str(val), True, COLOR_TEXT_MUTED)
+        lbl_rect = lbl.get_rect(center=(tx, top - 6))
+        screen.blit(lbl, lbl_rect)
+
+    # Gradient bar
+    bar_surf = pygame.Surface((bar_width, bar_height))
+    for px in range(bar_width):
+        t = px / (bar_width - 1)
+        if t < 0.5:
+            r = int(255 * (1 - 2 * t))
+            g = 0
+            b = 0
+        elif t > 0.5:
+            r = 0
+            g = int(255 * (2 * (t - 0.5)))
+            b = 0
+        else:
+            r, g, b = 0, 0, 0
+        dist_from_center = abs(t - 0.5) * 2
+        void_factor = 1 - dist_from_center * 0.7
+        r = int(r * void_factor)
+        g = int(g * void_factor)
+        bar_surf.set_at((px, 0), (r, g, b))
+    bar_surf = pygame.transform.scale(bar_surf, (bar_width, bar_height))
+    pygame.draw.rect(bar_surf, (*COLOR_PANEL_BORDER, 50), bar_surf.get_rect(), 1, border_radius=9)
+    screen.blit(bar_surf, (bar_left, top + 16))
+
+    # Direction labels
+    s_lbl = font_tiny.render("S (负场)", True, COLOR_TEXT_MUTED)
+    s_rect = s_lbl.get_rect(midleft=(bar_left, top + 36))
+    screen.blit(s_lbl, s_rect)
+
+    unit_lbl = font_tiny.render("f", True, COLOR_TEXT)
+    unit_rect = unit_lbl.get_rect(center=(center_x, top + 36))
+    screen.blit(unit_lbl, unit_rect)
+
+    n_lbl = font_tiny.render("N (正场)", True, COLOR_TEXT_MUTED)
+    n_rect = n_lbl.get_rect(midright=(bar_left + bar_width, top + 36))
+    screen.blit(n_lbl, n_rect)
+
+
 def draw_button(screen, rect, text, font, hover=False):
     shadow = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
     pygame.draw.rect(shadow, BUTTON_SHADOW, shadow.get_rect(), border_radius=BUTTON_RADIUS)
