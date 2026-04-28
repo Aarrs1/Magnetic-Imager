@@ -496,6 +496,29 @@ def draw_color_bar(screen, font_tiny, center_x, top):
     screen.blit(n_lbl, n_rect)
 
 
+def draw_cell_tooltip(screen, font_tiny, row, col, value, cell_rect):
+    """Draw frosted tooltip near the hovered cell showing row, col, and value."""
+    text = f"R{row} C{col}  {value:.0f} f"
+    text_surf = font_tiny.render(text, True, COLOR_TEXT)
+    text_rect = text_surf.get_rect()
+    text_rect.inflate_ip(14, 8)
+
+    # Position: to the right of cell, or left if near right edge
+    tooltip_x = cell_rect.right + 8
+    tooltip_y = cell_rect.centery - text_rect.height // 2
+    if tooltip_x + text_rect.width > WINDOW_WIDTH - SIDEBAR_WIDTH:
+        tooltip_x = cell_rect.left - text_rect.width - 8
+    tooltip_y = max(0, min(tooltip_y, WINDOW_HEIGHT - text_rect.height))
+
+    tooltip = pygame.Surface((text_rect.width, text_rect.height), pygame.SRCALPHA)
+    tooltip.fill((10, 18, 30, 230))
+    pygame.draw.rect(tooltip, (*COLOR_ACCENT_LIGHT, 80), tooltip.get_rect(), 1, border_radius=6)
+    screen.blit(tooltip, (tooltip_x, tooltip_y))
+
+    text_pos = text_surf.get_rect(center=(tooltip_x + text_rect.width // 2, tooltip_y + text_rect.height // 2))
+    screen.blit(text_surf, text_pos)
+
+
 def draw_button(screen, rect, text, font, hover=False):
     shadow = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
     pygame.draw.rect(shadow, BUTTON_SHADOW, shadow.get_rect(), border_radius=BUTTON_RADIUS)
