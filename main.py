@@ -519,18 +519,36 @@ def draw_cell_tooltip(screen, font_tiny, row, col, value, cell_rect):
     screen.blit(text_surf, text_pos)
 
 
-def draw_button(screen, rect, text, font, hover=False):
+def draw_button(screen, rect, text, font, hover=False, press_flash=0.0):
+    """Draw a frosted glass button with hover and press effects."""
+    button = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
+
+    # Fill with hover interpolation
+    base_alpha = int(18 + press_flash * 40)
+    hover_alpha = int(50 + press_flash * 30)
+    fill_alpha = hover_alpha if hover else base_alpha
+    fill_alpha = min(255, max(0, fill_alpha))
+    pygame.draw.rect(button, (180, 210, 240, fill_alpha), button.get_rect(), border_radius=BUTTON_RADIUS)
+
+    # Border
+    border_alpha = 120 if hover else 50
+    border_alpha = min(255, border_alpha + int(press_flash * 60))
+    pygame.draw.rect(button, (*COLOR_ACCENT_LIGHT, border_alpha), button.get_rect(), 1, border_radius=BUTTON_RADIUS)
+
+    # Top highlight line
+    highlight_alpha = 90 if hover else 40
+    pygame.draw.line(button, (220, 235, 250, highlight_alpha),
+                     (10, 5), (rect.width - 10, 5))
+
+    # Shadow
     shadow = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
-    pygame.draw.rect(shadow, BUTTON_SHADOW, shadow.get_rect(), border_radius=BUTTON_RADIUS)
+    shadow_alpha = 80 if hover else 50
+    pygame.draw.rect(shadow, (0, 0, 0, shadow_alpha), shadow.get_rect(), border_radius=BUTTON_RADIUS)
     screen.blit(shadow, (rect.x, rect.y + 2))
 
-    button = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
-    fill = BUTTON_FILL_HOVER if hover else BUTTON_FILL
-    pygame.draw.rect(button, fill, button.get_rect(), border_radius=BUTTON_RADIUS)
-    pygame.draw.rect(button, BUTTON_BORDER, button.get_rect(), 1, border_radius=BUTTON_RADIUS)
-    pygame.draw.line(button, (230, 242, 255, 80), (10, 6), (rect.width - 10, 6))
     screen.blit(button, rect.topleft)
 
+    # Text
     text_surf = font.render(text, True, COLOR_TEXT)
     text_rect = text_surf.get_rect(center=rect.center)
     screen.blit(text_surf, text_rect)
