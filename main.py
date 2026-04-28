@@ -23,6 +23,7 @@ import sys
 import threading
 import time
 import random
+import math
 
 import serial
 import serial.tools.list_ports
@@ -141,38 +142,52 @@ def clamp(v, lo=0, hi=255):
     return max(lo, min(hi, v))
 
 
-def create_cool_frosted_background(size):
+def create_background(size):
+    """Create base background surface (static noise + frost layer)."""
     surface = pygame.Surface(size)
-    surface.fill(COLOR_BG_BASE)
+    surface.fill(COLOR_VOID)
 
     noise = pygame.Surface(size, pygame.SRCALPHA)
     rng = random.Random(7)
-    for _ in range(900):
+    for _ in range(600):
         x = rng.randrange(0, size[0])
         y = rng.randrange(0, size[1])
         r = rng.choice([1, 1, 1, 2])
-        shade = rng.randrange(22, 60)
-        alpha = rng.randrange(12, 26)
-        pygame.draw.circle(noise, (shade, shade + 4, shade + 12, alpha), (x, y), r)
-    for _ in range(450):
+        shade = rng.randrange(18, 50)
+        alpha = rng.randrange(8, 20)
+        pygame.draw.circle(noise, (shade, shade + 4, shade + 14, alpha), (x, y), r)
+    for _ in range(300):
         x = rng.randrange(0, size[0])
         y = rng.randrange(0, size[1])
         r = 1
-        shade = rng.randrange(120, 160)
-        alpha = rng.randrange(10, 18)
-        pygame.draw.circle(noise, (shade, shade + 8, shade + 22, alpha), (x, y), r)
-
-    glow = pygame.Surface(size, pygame.SRCALPHA)
-    pygame.draw.circle(glow, (90, 130, 170, 30), (size[0] - 120, 180), 180)
-    pygame.draw.circle(glow, (70, 110, 150, 22), (size[0] - 60, 420), 220)
+        shade = rng.randrange(90, 140)
+        alpha = rng.randrange(6, 14)
+        pygame.draw.circle(noise, (shade, shade + 8, shade + 24, alpha), (x, y), r)
 
     frost = pygame.Surface(size, pygame.SRCALPHA)
-    frost.fill((200, 215, 235, 18))
+    frost.fill((180, 200, 225, 12))
 
-    surface.blit(glow, (0, 0))
     surface.blit(frost, (0, 0))
     surface.blit(noise, (0, 0))
     return surface
+
+
+def draw_background_glow(screen, time_sec):
+    """Draw animated ambient glow spots that drift slowly."""
+    glow = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
+    # Glow 1: top-right area
+    cx1 = screen.get_width() - 120 + int(20 * math.sin(time_sec * 0.4))
+    cy1 = 160 + int(15 * math.cos(time_sec * 0.35))
+    alpha1 = int(25 + 10 * math.sin(time_sec * 0.6))
+    pygame.draw.circle(glow, (80, 120, 170, alpha1), (cx1, cy1), 200)
+
+    # Glow 2: bottom-left area
+    cx2 = 100 + int(18 * math.cos(time_sec * 0.45))
+    cy2 = screen.get_height() - 140 + int(12 * math.sin(time_sec * 0.5))
+    alpha2 = int(18 + 8 * math.cos(time_sec * 0.55))
+    pygame.draw.circle(glow, (60, 100, 150, alpha2), (cx2, cy2), 180)
+
+    screen.blit(glow, (0, 0))
 
 
 # ── Data Store / 数据存储 ──────────────────────────────────────────
@@ -431,7 +446,7 @@ def main():
     screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
     pygame.display.set_caption("Magnetic Imager Tile v3")
     clock = pygame.time.Clock()
-    background = create_cool_frosted_background((WINDOW_WIDTH, WINDOW_HEIGHT))
+    background = create_background((WINDOW_WIDTH, WINDOW_HEIGHT))
 
     # Load font / 加载固定黑体字体（simhei）
     font_path = pygame.font.match_font("simhei")
@@ -540,6 +555,8 @@ def main():
 
         # ── Render / 渲染 ──────────────────────────────────────
         screen.blit(background, (0, 0))
+        time_sec = pygame.time.get_ticks() / 1000.0
+        draw_background_glow(screen, time_sec)
 
         # Sidebar / 左侧控制面板
         sidebar_rect = pygame.Rect(0, 0, SIDEBAR_WIDTH, WINDOW_HEIGHT)
