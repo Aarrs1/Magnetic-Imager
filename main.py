@@ -338,45 +338,99 @@ class SerialReader:
 
 
 # ── Renderer / 渲染器 ─────────────────────────────────────────────
-def draw_grid(screen, data, data_calib, is_calibrated, offset_y,
-              gain_normal, gain_calib):
-    # Draw background panel / 绘制背景底板
-    panel_rect = (OFFSET_X + PIXEL_SIZE - 10, offset_y + PIXEL_SIZE - 10, GRID_SIZE + 20, GRID_SIZE + 20)
-    pygame.draw.rect(screen, COLOR_PANEL, panel_rect, border_radius=8)
-    pygame.draw.rect(screen, COLOR_PANEL_BORDER, panel_rect, 1, border_radius=8)
+def draw_grid(screen, data, data_calib, is_calibrated, grid_left, grid_top,
+              gain_normal, gain_calib, cell_states, mouse_pos, font_tiny):
+    """Draw one 8x8 grid at (grid_left, grid_top) with external labels and frosted panel."""
 
+    # Frosted panel background
+    panel_padding = 8
+    panel_rect = pygame.Rect(
+        grid_left - panel_padding,
+        grid_top - panel_padding,
+        GRID_SIZE + panel_padding * 2,
+        GRID_SIZE + panel_padding * 2,
+    )
+    panel_surf = pygame.Surface((panel_rect.width, panel_rect.height), pygame.SRCALPHA)
+    panel_surf.fill((COLOR_PANEL[0], COLOR_PANEL[1], COLOR_PANEL[2], FROST_PANEL_ALPHA))
+    pygame.draw.rect(panel_surf, (*COLOR_PANEL_BORDER, 60), panel_surf.get_rect(), 1, border_radius=8)
+    screen.blit(panel_surf, panel_rect.topleft)
+
+    # Row labels (left of grid) — 7 down to 0
+    for row in range(MAX_SIZE):
+        lbl = font_tiny.render(str(MAX_SIZE - 1 - row), True, COLOR_TEXT_MUTED)
+        lbl_rect = lbl.get_rect(
+            midright=(grid_left - 6, grid_top + row * PIXEL_SIZE + PIXEL_SIZE // 2)
+        )
+        screen.blit(lbl, lbl_rect)
+
+    # Col labels (above grid) — 0 to 7
+    for col in range(MAX_SIZE):
+        lbl = font_tiny.render(str(col), True, COLOR_TEXT_MUTED)
+        lbl_rect = lbl.get_rect(
+            midbottom=(grid_left + col * PIXEL_SIZE + PIXEL_SIZE // 2, grid_top - 4)
+        )
+        screen.blit(lbl, lbl_rect)
+
+    # Cell border surface (reusable)
     border_surf = pygame.Surface((PIXEL_SIZE, PIXEL_SIZE), pygame.SRCALPHA)
-    pygame.draw.rect(border_surf, (220, 235, 255, 35), border_surf.get_rect(), 1)
+    pygame.draw.rect(border_surf, (200, 225, 245, 28), border_surf.get_rect(), 1)
+
+    hover_idx = None
+    if mouse_pos:
+        mx, my = mouse_pos
+        rel_x = mx - grid_left
+        rel_y = my - grid_top
+        if 0 <= rel_x < GRID_SIZE and 0 <= rel_y < GRID_SIZE:
+            hover_col = rel_x // PIXEL_SIZE
+            hover_row = (MAX_SIZE - 1) - rel_y // PIXEL_SIZE
+            hover_idx = (hover_row, hover_col)
 
     for i in range(MAX_SIZE):
         for j in range(MAX_SIZE):
-            y = (MAX_SIZE - i) * PIXEL_SIZE
-            x = (MAX_SIZE - j) * PIXEL_SIZE
+            y = (MAX_SIZE - 1 - i) * PIXEL_SIZE
+            x = j * PIXEL_SIZE
 
             if is_calibrated:
                 value = (data[i][j] - data_calib[i][j]) / MAX_VALUE
                 intensity = int(gain_calib * value)
                 if value < 0.0:
-                    color = (clamp(-intensity), 0, 0)
+                    target_color = (clamp(-intensity), 0, 0)
                 else:
-                    color = (0, clamp(intensity), 0)
+                    target_color = (0, clamp(intensity), 0)
             else:
                 value = data[i][j] / MAX_VALUE
                 intensity = int(gain_normal * abs(value - 0.50))
                 if value < 0.50:
-                    color = (clamp(intensity), 0, 0)
+                    target_color = (clamp(intensity), 0, 0)
                 else:
-                    color = (0, clamp(intensity), 0)
+                    target_color = (0, clamp(intensity), 0)
 
-            rect = (x + OFFSET_X, y + offset_y, PIXEL_SIZE, PIXEL_SIZE)
+            # Update animation state
+            key = (i, j)
+            if key not in cell_states:
+                cell_states[key] = CellAnimState()
+            prev_target = cell_states[key].target
+            cell_states[key].set_target(target_color, pulse=(prev_target != target_color))
+
+            # Draw cell with animated color
+            rect = (x + grid_left, y + grid_top, PIXEL_SIZE, PIXEL_SIZE)
+            color = cell_states[key].current
             pygame.draw.rect(screen, color, rect)
-            screen.blit(border_surf, (x + OFFSET_X, y + offset_y))
+            screen.blit(border_surf, (x + grid_left, y + grid_top))
+
+            # Hover outline
+            if hover_idx == key:
+                hover_outline = pygame.Surface((PIXEL_SIZE, PIXEL_SIZE), pygame.SRCALPHA)
+                pygame.draw.rect(hover_outline, (180, 210, 240, 150), hover_outline.get_rect(), 2)
+                screen.blit(hover_outline, (x + grid_left, y + grid_top))
+
+    return hover_idx
 
 
-def draw_label(screen, font, text, offset_y):
+def draw_grid_label(screen, font, text, grid_center_x, grid_top):
+    """Draw grid title centered above the grid."""
     label = font.render(text, True, COLOR_TEXT)
-    # Center the label / 居中标签
-    label_rect = label.get_rect(center=(GRID_CENTER_X, offset_y + 5))
+    label_rect = label.get_rect(center=(grid_center_x, grid_top - GRID_LABEL_HEIGHT - 6))
     screen.blit(label, label_rect)
 
 
@@ -478,6 +532,8 @@ def main():
         buttons.append({"label": label, "action": action, "rect": rect})
         button_y += BUTTON_HEIGHT + BUTTON_GAP
 
+    cell_states = {}  # cell animation states
+
     def handle_action(action):
         nonlocal toast_message, toast_start_ms, screenshot_number
 
@@ -569,18 +625,24 @@ def main():
 
         data, data_calib, is_calibrated = datastore.get_snapshot()
 
-        # Normal gain grid (top) / 正常增益网格（上方）
-        draw_label(screen, font, "Normal Gain / 正常增益", OFFSET_Y_NORMAL)
-        draw_grid(screen, data, data_calib, is_calibrated,
-                  OFFSET_Y_NORMAL, gain_normal=255, gain_calib=255)
+        # Mouse position for hover detection
+        mouse_pos = pygame.mouse.get_pos()
 
-        # High gain grid (bottom) / 高增益网格（下方）
-        draw_label(screen, font, "High Gain / 高增益", OFFSET_Y_HIGH)
-        draw_grid(screen, data, data_calib, is_calibrated,
-                  OFFSET_Y_HIGH, gain_normal=3000, gain_calib=3000)
+        # Normal gain grid (left)
+        grid_center_normal = GRID_NORMAL_LEFT + GRID_SIZE // 2
+        draw_grid_label(screen, font, "Normal Gain / 正常增益", grid_center_normal, GRID_TOP)
+        hover_idx_normal = draw_grid(screen, data, data_calib, is_calibrated,
+                  GRID_NORMAL_LEFT, GRID_TOP, gain_normal=255, gain_calib=255,
+                  cell_states=cell_states, mouse_pos=mouse_pos, font_tiny=small_font)
+
+        # High gain grid (right)
+        grid_center_high = GRID_HIGH_LEFT + GRID_SIZE // 2
+        draw_grid_label(screen, font, "High Gain / 高增益", grid_center_high, GRID_TOP)
+        hover_idx_high = draw_grid(screen, data, data_calib, is_calibrated,
+                  GRID_HIGH_LEFT, GRID_TOP, gain_normal=3000, gain_calib=3000,
+                  cell_states=cell_states, mouse_pos=mouse_pos, font_tiny=small_font)
 
         # Status text / 状态文字
-        mouse_pos = pygame.mouse.get_pos()
         for button in buttons:
             hover = button["rect"].collidepoint(mouse_pos)
             draw_button(screen, button["rect"], button["label"], button_font, hover)
