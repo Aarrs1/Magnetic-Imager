@@ -637,16 +637,18 @@ def main():
     clock = pygame.time.Clock()
     background = create_background((WINDOW_WIDTH, WINDOW_HEIGHT))
 
-    # Load font / 加载固定黑体字体（simhei）
+    # Load fonts
     font_path = pygame.font.match_font("simhei")
     if font_path:
-        font = pygame.font.Font(font_path, 20)
-        button_font = pygame.font.Font(font_path, 16)
-        small_font = pygame.font.Font(font_path, 14)
+        font = pygame.font.Font(font_path, 16)
+        button_font = pygame.font.Font(font_path, 13)
+        small_font = pygame.font.Font(font_path, 11)
+        tiny_font = pygame.font.Font(font_path, 9)
     else:
-        font = pygame.font.SysFont("simhei", 20)
-        button_font = pygame.font.SysFont("simhei", 16)
-        small_font = pygame.font.SysFont("simhei", 14)
+        font = pygame.font.SysFont("simhei", 16)
+        button_font = pygame.font.SysFont("simhei", 13)
+        small_font = pygame.font.SysFont("simhei", 11)
+        tiny_font = pygame.font.SysFont("simhei", 9)
 
     print(f"Using SimHei font: {font_path or 'system fallback'}")
 
@@ -658,19 +660,28 @@ def main():
     toast_start_ms = 0
     screenshot_number = 0
     running = True
+    is_live = False
+    fps_smooth = 60.0
+    start_time = time.time()
 
+    # Cell animation states
+    cell_states = {}
+
+    # Button press flash tracking
+    button_flash = {}  # action -> flash_remaining (seconds)
+
+    # Build buttons — right sidebar
     buttons = []
-    button_x = (SIDEBAR_WIDTH - BUTTON_WIDTH) // 2
-    button_y = SIDEBAR_PADDING_TOP + 26
+    button_x = SIDEBAR_PADDING_X
+    button_y = SIDEBAR_PADDING_TOP + 24
     for label, action in BUTTON_DEFS:
-        rect = pygame.Rect(button_x, button_y, BUTTON_WIDTH, BUTTON_HEIGHT)
+        rect = pygame.Rect(WINDOW_WIDTH - SIDEBAR_WIDTH + button_x, button_y,
+                           BUTTON_WIDTH, BUTTON_HEIGHT)
         buttons.append({"label": label, "action": action, "rect": rect})
         button_y += BUTTON_HEIGHT + BUTTON_GAP
 
-    cell_states = {}  # cell animation states
-
     def handle_action(action):
-        nonlocal toast_message, toast_start_ms, screenshot_number
+        nonlocal toast_message, toast_start_ms, screenshot_number, is_live
 
         def show_toast(message):
             nonlocal toast_message, toast_start_ms
@@ -682,46 +693,53 @@ def main():
             pygame.image.save(screen, filename)
             print(f"Screenshot saved: {filename}")
             screenshot_number += 1
+            show_toast("Screenshot saved")
             return
 
         if action == "A":
             datastore.clear_data()
+            show_toast("Data cleared")
             return
 
         if action == "L":
             serial_reader.write("L")
+            is_live = True
             show_toast("Live Feed")
             return
 
         if action == "H":
             serial_reader.write("H")
+            show_toast("H sent")
             return
 
         if action == "S":
             serial_reader.write("S")
-            show_toast("已停止")
+            is_live = False
+            show_toast("Stopped")
             return
 
         if action in ("1", "2", "3", "4"):
             serial_reader.write(action)
-            show_toast({
-                "1": "2000Hz capture",
-                "2": "1000Hz capture",
-                "3": "500Hz capture",
-                "4": "250Hz capture",
-            }[action])
+            freq_map = {"1": "2000Hz", "2": "1000Hz", "3": "500Hz", "4": "250Hz"}
+            show_toast(f"{freq_map[action]} capture")
             return
 
         if action == "C":
             datastore.start_calibration()
-            show_toast("Calibrating")
+            show_toast("Calibrating...")
             return
 
         if action == "D":
             datastore.print_calib_data()
             return
 
+    last_time = time.time()
     while running:
+        now = time.time()
+        dt = now - last_time
+        last_time = now
+        total_time = now - start_time
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
@@ -736,58 +754,113 @@ def main():
 
                 if action:
                     handle_action(action)
+                    button_flash[action] = 0.15  # 150ms flash
 
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1:
                     for button in buttons:
                         if button["rect"].collidepoint(event.pos):
                             handle_action(button["action"])
+                            button_flash[button["action"]] = 0.15
                             break
 
-        # ── Render / 渲染 ──────────────────────────────────────
+        # ── Update animations ──
+        for state in cell_states.values():
+            state.update(dt)
+
+        # Decay button flash
+        for action in list(button_flash.keys()):
+            button_flash[action] -= dt
+            if button_flash[action] <= 0:
+                del button_flash[action]
+
+        # Smooth FPS
+        current_fps = clock.get_fps()
+        if current_fps > 0:
+            fps_smooth = fps_smooth * 0.9 + current_fps * 0.1
+
+        # ── Render ──
         screen.blit(background, (0, 0))
-        time_sec = pygame.time.get_ticks() / 1000.0
-        draw_background_glow(screen, time_sec)
+        draw_background_glow(screen, total_time)
 
-        # Sidebar / 左侧控制面板
-        sidebar_rect = pygame.Rect(0, 0, SIDEBAR_WIDTH, WINDOW_HEIGHT)
-        pygame.draw.rect(screen, COLOR_SIDEBAR, sidebar_rect)
-        pygame.draw.line(screen, COLOR_SIDEBAR_EDGE, (SIDEBAR_WIDTH, 0), (SIDEBAR_WIDTH, WINDOW_HEIGHT), 2)
+        # Sidebar (right edge, frosted)
+        sidebar_rect = pygame.Rect(WINDOW_WIDTH - SIDEBAR_WIDTH, 0,
+                                   SIDEBAR_WIDTH, WINDOW_HEIGHT)
+        sidebar_surf = pygame.Surface((SIDEBAR_WIDTH, WINDOW_HEIGHT), pygame.SRCALPHA)
+        sidebar_surf.fill((COLOR_SIDEBAR[0], COLOR_SIDEBAR[1], COLOR_SIDEBAR[2], FROST_SIDEBAR_ALPHA))
+        screen.blit(sidebar_surf, sidebar_rect.topleft)
+        pygame.draw.line(screen, COLOR_SIDEBAR_EDGE,
+                         (WINDOW_WIDTH - SIDEBAR_WIDTH, 0),
+                         (WINDOW_WIDTH - SIDEBAR_WIDTH, WINDOW_HEIGHT), 1)
 
+        # Sidebar title
         title_surf = small_font.render("控制", True, COLOR_TEXT_MUTED)
-        title_rect = title_surf.get_rect(midleft=(18, SIDEBAR_PADDING_TOP))
+        title_rect = title_surf.get_rect(midleft=(WINDOW_WIDTH - SIDEBAR_WIDTH + 16, 18))
         screen.blit(title_surf, title_rect)
 
         data, data_calib, is_calibrated = datastore.get_snapshot()
 
-        # Mouse position for hover detection
+        # Grid labels
+        normal_center = GRID_NORMAL_LEFT + GRID_SIZE // 2
+        high_center = GRID_HIGH_LEFT + GRID_SIZE // 2
+        draw_grid_label(screen, font, "Normal Gain / 正常增益", normal_center, GRID_TOP)
+        draw_grid_label(screen, font, "High Gain / 高增益", high_center, GRID_TOP)
+
+        # Draw grids
         mouse_pos = pygame.mouse.get_pos()
+        hover_normal = draw_grid(screen, data, data_calib, is_calibrated,
+                                 GRID_NORMAL_LEFT, GRID_TOP, 255, 255,
+                                 cell_states, mouse_pos, tiny_font)
+        hover_high = draw_grid(screen, data, data_calib, is_calibrated,
+                               GRID_HIGH_LEFT, GRID_TOP, 3000, 3000,
+                               cell_states, mouse_pos, tiny_font)
 
-        # Normal gain grid (left)
-        grid_center_normal = GRID_NORMAL_LEFT + GRID_SIZE // 2
-        draw_grid_label(screen, font, "Normal Gain / 正常增益", grid_center_normal, GRID_TOP)
-        hover_idx_normal = draw_grid(screen, data, data_calib, is_calibrated,
-                  GRID_NORMAL_LEFT, GRID_TOP, gain_normal=255, gain_calib=255,
-                  cell_states=cell_states, mouse_pos=mouse_pos, font_tiny=small_font)
+        # Cell tooltips
+        if hover_normal:
+            row, col = hover_normal
+            cell_rect = pygame.Rect(
+                GRID_NORMAL_LEFT + col * PIXEL_SIZE,
+                GRID_TOP + (MAX_SIZE - 1 - row) * PIXEL_SIZE,
+                PIXEL_SIZE, PIXEL_SIZE,
+            )
+            value = data[row][col]
+            if is_calibrated:
+                value = data[row][col] - data_calib[row][col]
+            draw_cell_tooltip(screen, tiny_font, row, col, value, cell_rect)
 
-        # High gain grid (right)
-        grid_center_high = GRID_HIGH_LEFT + GRID_SIZE // 2
-        draw_grid_label(screen, font, "High Gain / 高增益", grid_center_high, GRID_TOP)
-        hover_idx_high = draw_grid(screen, data, data_calib, is_calibrated,
-                  GRID_HIGH_LEFT, GRID_TOP, gain_normal=3000, gain_calib=3000,
-                  cell_states=cell_states, mouse_pos=mouse_pos, font_tiny=small_font)
+        if hover_high:
+            row, col = hover_high
+            cell_rect = pygame.Rect(
+                GRID_HIGH_LEFT + col * PIXEL_SIZE,
+                GRID_TOP + (MAX_SIZE - 1 - row) * PIXEL_SIZE,
+                PIXEL_SIZE, PIXEL_SIZE,
+            )
+            value = data[row][col]
+            if is_calibrated:
+                value = data[row][col] - data_calib[row][col]
+            draw_cell_tooltip(screen, tiny_font, row, col, value, cell_rect)
 
-        # Status text / 状态文字
+        # Color bar
+        color_bar_center = (GRID_NORMAL_LEFT + GRID_HIGH_LEFT + GRID_SIZE) // 2
+        draw_color_bar(screen, tiny_font, color_bar_center, COLORBAR_TOP)
+
+        # Buttons
         for button in buttons:
             hover = button["rect"].collidepoint(mouse_pos)
-            draw_button(screen, button["rect"], button["label"], button_font, hover)
+            flash = button_flash.get(button["action"], 0.0)
+            draw_button(screen, button["rect"], button["label"], button_font, hover, flash)
 
+        # Status bar
+        com_info = "COM3 · 115200" if serial_reader.ser else "No COM"
+        draw_status_bar(screen, tiny_font, com_info, is_live, fps_smooth, total_time)
+
+        # Toast
         if toast_message:
             elapsed_ms = pygame.time.get_ticks() - toast_start_ms
             if elapsed_ms >= TOAST_DURATION_MS + TOAST_FADE_MS:
                 toast_message = ""
             else:
-                draw_toast(screen, font, toast_message, elapsed_ms)
+                draw_toast(screen, small_font, toast_message, elapsed_ms)
 
         pygame.display.flip()
         clock.tick(60)
