@@ -57,8 +57,38 @@ Magnetic_Imager/
 ├── layout.py          # 按钮布局构建器
 ├── actions.py         # 动作分发
 ├── projecttest.pde    # 原始 Processing 草图（参考）
-├── Image/             # Arduino 固件代码
+├── Image/             # ESP32-S3 固件（PlatformIO 项目）
+│   ├── src/main.cpp   # 传感器读取、SPI 通信、串口输出
+│   └── platformio.ini # ESP32-S3-DevKitC-1 配置
 └── docs/              # 项目文档
+```
+
+## ESP32 固件
+
+`Image/` 目录包含 ESP32-S3 的固件代码，负责从 8×8 磁传感器阵列采集数据。
+
+### 硬件
+
+- **MCU** — ESP32-S3-DevKitC-1
+- **ADC** — AD7680（16-bit SPI SAR ADC）
+- **传感器** — DRV5053 霍尔效应传感器（±9 mT）
+- **采样率** — 921600 baud 串口输出
+
+### 工作模式
+
+| 模式 | 说明 |
+|------|------|
+| IDLE | 空闲，等待指令 |
+| LIVE | 实时逐帧输出 |
+| HIGH SPEED 1-4 | 高速批量采集（多帧缓冲） |
+| PIXEL | 单像素调试模式 |
+| VERIFY | 校验模式 |
+
+### 编译烧录
+
+```bash
+cd Image
+pio run -t upload
 ```
 
 ## 配置
