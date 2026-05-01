@@ -1,0 +1,75 @@
+# ============================================================
+# IDE
+# ============================================================
+.idea/
+.vscode/
+*.sublime-*
+*.swp
+*.swo
+*~
+
+# ============================================================
+# Python
+# ============================================================
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+*.egg
+dist/
+build/
+eggs/
+.eggs/
+.Python
+*.manifest
+*.spec
+
+# 虚拟环境
+venv/
+.venv/
+env/
+.env
+*.venv
+
+# pip
+pip-log.txt
+pip-delete-this-directory.txt
+
+# mypy / type checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# pytest / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+nosetests.xml
+coverage.xml
+*.cover
+
+# ============================================================
+# 项目工具
+# ============================================================
+.claude/
+.superpowers/
+
+# ============================================================
+# 生成文件
+# ============================================================
+screenshots/
+*.log
+
+# ============================================================
+# 操作系统
+# ============================================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
